@@ -1,0 +1,23 @@
+services:
+  - type: web
+    name: commander-chat
+    env: python
+    region: oregon
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: python app.py
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: SECRET_KEY
+        generateValue: true
+      - key: CREATOR_API_KEY
+        generateValue: true
+      - key: OVERRIDE_TOKEN
+        generateValue: true
+      - key: CREATOR_EMAIL
+        value: "ssemujjua3@gmail.com"
+      - key: CREATOR_PASSWORD
+        value: "ChangeMe123!"
+      - key: OPENAI_API_KEY
+        value: "sk-your-openai-key-here"  # ← CHANGE THIS!
