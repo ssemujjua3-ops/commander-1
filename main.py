@@ -176,27 +176,43 @@ class ConnectionManager:
 
 manager = ConnectionManager()
 
-# ==================== OPENAI SERVICE ====================
+# ==================== OPENAI SERVICE (FIXED FOR DEPLOYMENT) ====================
 class OpenAIService:
     def __init__(self):
         self.api_key = OPENAI_API_KEY
-        self.enabled = bool(self.api_key.strip())
-        print(f"🧠 OpenAI: {'✅ ENABLED' if self.enabled else '❌ DISABLED'}")
+        self.enabled = bool(self.api_key and self.api_key.strip())
+        
+        if self.enabled:
+            try:
+                # Updated for OpenAI v1.x
+                import openai
+                openai.api_key = self.api_key
+                self.client = openai.AsyncOpenAI(api_key=self.api_key)
+                print("🧠 OpenAI: ✅ ENABLED")
+            except ImportError:
+                print("⚠️ OpenAI package not installed")
+                self.enabled = False
+                self.client = None
+            except Exception as e:
+                print(f"⚠️ OpenAI init error: {e}")
+                self.enabled = False
+                self.client = None
+        else:
+            print("🧠 OpenAI: ❌ DISABLED (no API key)")
+            self.client = None
     
     async def chat_completion(self, messages: List[Dict], bot_config: Dict = None) -> str:
         """Chat with OpenAI API"""
-        if not self.enabled:
+        if not self.enabled or not self.client:
             return self._fallback_response(messages)
         
         try:
-            import openai
-            openai.api_key = self.api_key
-            
             # Use bot-specific configuration
             model = bot_config.get("model", "gpt-3.5-turbo") if bot_config else "gpt-3.5-turbo"
             temperature = bot_config.get("temperature", 0.7) if bot_config else 0.7
             
-            response = await openai.ChatCompletion.acreate(
+            # Updated for OpenAI v1.x
+            response = await self.client.chat.completions.create(
                 model=model,
                 messages=messages,
                 temperature=temperature,
@@ -215,7 +231,7 @@ class OpenAIService:
         
         responses = [
             f"I understand you said: '{last_message[:50]}...' This is a fallback response.",
-            "I'm currently using fallback mode. To enable AI responses, add your OpenAI API key.",
+            "I'm currently using fallback mode. To enable AI responses, add your OpenAI API key in Render environment variables.",
             f"Received your message about: {last_message[:30]}...",
             "Hello! I'm your AI assistant in fallback mode. Add OpenAI key for full functionality.",
             "I can help you with various tasks. Currently in basic mode - add API key for AI features."
@@ -589,7 +605,7 @@ async def delete_bot(
 @app.get("/chat-ui")
 async def chat_interface():
     """Main chat interface (like DeepSeek)"""
-    html = """
+    html = f"""
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -598,21 +614,21 @@ async def chat_interface():
     <title>🤖 Commander AI - Chat Interface</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
-        * {
+        * {{
             margin: 0;
             padding: 0;
             box-sizing: border-box;
-        }
+        }}
         
-        body {
+        body {{
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: #333;
             height: 100vh;
             overflow: hidden;
-        }
+        }}
         
-        .app-container {
+        .app-container {{
             display: flex;
             height: 100vh;
             max-width: 1600px;
@@ -621,44 +637,44 @@ async def chat_interface():
             border-radius: 20px;
             overflow: hidden;
             box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-        }
+        }}
         
         /* SIDEBAR */
-        .sidebar {
+        .sidebar {{
             width: 300px;
             background: #1a1a2e;
             color: white;
             display: flex;
             flex-direction: column;
             border-right: 1px solid #2d2d4d;
-        }
+        }}
         
-        .sidebar-header {
+        .sidebar-header {{
             padding: 25px;
             border-bottom: 1px solid #2d2d4d;
-        }
+        }}
         
-        .sidebar-header h1 {
+        .sidebar-header h1 {{
             font-size: 1.8rem;
             margin-bottom: 5px;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             background-clip: text;
-        }
+        }}
         
-        .sidebar-header p {
+        .sidebar-header p {{
             color: #a0a0c0;
             font-size: 0.9rem;
-        }
+        }}
         
-        .bot-list {
+        .bot-list {{
             flex: 1;
             overflow-y: auto;
             padding: 20px;
-        }
+        }}
         
-        .bot-card {
+        .bot-card {{
             background: #2d2d4d;
             border-radius: 12px;
             padding: 15px;
@@ -666,26 +682,26 @@ async def chat_interface():
             cursor: pointer;
             transition: all 0.3s ease;
             border: 2px solid transparent;
-        }
+        }}
         
-        .bot-card:hover {
+        .bot-card:hover {{
             background: #3d3d5d;
             transform: translateX(5px);
-        }
+        }}
         
-        .bot-card.active {
+        .bot-card.active {{
             background: #3d3d5d;
             border-color: #667eea;
-        }
+        }}
         
-        .bot-header {
+        .bot-header {{
             display: flex;
             align-items: center;
             gap: 12px;
             margin-bottom: 10px;
-        }
+        }}
         
-        .bot-avatar {
+        .bot-avatar {{
             width: 40px;
             height: 40px;
             background: #667eea;
@@ -694,53 +710,53 @@ async def chat_interface():
             align-items: center;
             justify-content: center;
             font-size: 1.5rem;
-        }
+        }}
         
-        .bot-info h3 {
+        .bot-info h3 {{
             font-size: 1.1rem;
             margin-bottom: 3px;
-        }
+        }}
         
-        .bot-status {
+        .bot-status {{
             display: flex;
             align-items: center;
             gap: 5px;
             font-size: 0.8rem;
             color: #a0a0c0;
-        }
+        }}
         
-        .status-dot {
+        .status-dot {{
             width: 8px;
             height: 8px;
             border-radius: 50%;
             background: #10b981;
-        }
+        }}
         
-        .status-dot.offline {
+        .status-dot.offline {{
             background: #ef4444;
-        }
+        }}
         
-        .bot-skills {
+        .bot-skills {{
             display: flex;
             flex-wrap: wrap;
             gap: 5px;
             margin-top: 8px;
-        }
+        }}
         
-        .skill-tag {
+        .skill-tag {{
             background: #4f46e5;
             color: white;
             padding: 3px 8px;
             border-radius: 12px;
             font-size: 0.75rem;
-        }
+        }}
         
-        .sidebar-footer {
+        .sidebar-footer {{
             padding: 20px;
             border-top: 1px solid #2d2d4d;
-        }
+        }}
         
-        .create-bot-btn {
+        .create-bot-btn {{
             width: 100%;
             padding: 12px;
             background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
@@ -755,36 +771,36 @@ async def chat_interface():
             justify-content: center;
             gap: 8px;
             transition: transform 0.2s;
-        }
+        }}
         
-        .create-bot-btn:hover {
+        .create-bot-btn:hover {{
             transform: translateY(-2px);
-        }
+        }}
         
         /* MAIN CHAT AREA */
-        .chat-area {
+        .chat-area {{
             flex: 1;
             display: flex;
             flex-direction: column;
             background: #f8fafc;
-        }
+        }}
         
-        .chat-header {
+        .chat-header {{
             padding: 20px 30px;
             background: white;
             border-bottom: 1px solid #e2e8f0;
             display: flex;
             align-items: center;
             justify-content: space-between;
-        }
+        }}
         
-        .chat-header-info {
+        .chat-header-info {{
             display: flex;
             align-items: center;
             gap: 15px;
-        }
+        }}
         
-        .chat-header-avatar {
+        .chat-header-avatar {{
             width: 50px;
             height: 50px;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
@@ -793,24 +809,24 @@ async def chat_interface():
             align-items: center;
             justify-content: center;
             font-size: 1.8rem;
-        }
+        }}
         
-        .chat-header-text h2 {
+        .chat-header-text h2 {{
             font-size: 1.5rem;
             margin-bottom: 3px;
-        }
+        }}
         
-        .chat-header-text p {
+        .chat-header-text p {{
             color: #64748b;
             font-size: 0.9rem;
-        }
+        }}
         
-        .chat-actions {
+        .chat-actions {{
             display: flex;
             gap: 10px;
-        }
+        }}
         
-        .action-btn {
+        .action-btn {{
             background: #f1f5f9;
             border: none;
             width: 40px;
@@ -822,59 +838,59 @@ async def chat_interface():
             cursor: pointer;
             color: #64748b;
             transition: all 0.2s;
-        }
+        }}
         
-        .action-btn:hover {
+        .action-btn:hover {{
             background: #e2e8f0;
             color: #4f46e5;
-        }
+        }}
         
         /* MESSAGES AREA */
-        .messages-container {
+        .messages-container {{
             flex: 1;
             overflow-y: auto;
             padding: 30px;
             display: flex;
             flex-direction: column;
             gap: 20px;
-        }
+        }}
         
-        .message {
+        .message {{
             max-width: 70%;
             padding: 15px 20px;
             border-radius: 18px;
             position: relative;
             animation: fadeIn 0.3s ease;
-        }
+        }}
         
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(10px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
+        @keyframes fadeIn {{
+            from {{ opacity: 0; transform: translateY(10px); }}
+            to {{ opacity: 1; transform: translateY(0); }}
+        }}
         
-        .message.user {
+        .message.user {{
             background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
             color: white;
             align-self: flex-end;
             border-bottom-right-radius: 5px;
-        }
+        }}
         
-        .message.bot {
+        .message.bot {{
             background: white;
             color: #333;
             align-self: flex-start;
             border-bottom-left-radius: 5px;
             box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-        }
+        }}
         
-        .message-header {
+        .message-header {{
             display: flex;
             align-items: center;
             gap: 10px;
             margin-bottom: 8px;
-        }
+        }}
         
-        .message-avatar {
+        .message-avatar {{
             width: 30px;
             height: 30px;
             border-radius: 50%;
@@ -882,38 +898,38 @@ async def chat_interface():
             align-items: center;
             justify-content: center;
             font-size: 1rem;
-        }
+        }}
         
-        .message.user .message-avatar {
+        .message.user .message-avatar {{
             background: rgba(255,255,255,0.2);
-        }
+        }}
         
-        .message.bot .message-avatar {
+        .message.bot .message-avatar {{
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
-        }
+        }}
         
-        .message-sender {
+        .message-sender {{
             font-weight: 600;
             font-size: 0.9rem;
-        }
+        }}
         
-        .message-time {
+        .message-time {{
             font-size: 0.75rem;
             opacity: 0.7;
             margin-left: auto;
-        }
+        }}
         
-        .message-content {
+        .message-content {{
             line-height: 1.5;
-        }
+        }}
         
-        .message.bot .message-content {
+        .message.bot .message-content {{
             white-space: pre-wrap;
             word-wrap: break-word;
-        }
+        }}
         
-        .typing-indicator {
+        .typing-indicator {{
             align-self: flex-start;
             background: white;
             padding: 15px 20px;
@@ -923,43 +939,43 @@ async def chat_interface():
             display: flex;
             align-items: center;
             gap: 10px;
-        }
+        }}
         
-        .typing-dots {
+        .typing-dots {{
             display: flex;
             gap: 4px;
-        }
+        }}
         
-        .typing-dot {
+        .typing-dot {{
             width: 8px;
             height: 8px;
             background: #a0a0c0;
             border-radius: 50%;
             animation: typing 1.4s infinite;
-        }
+        }}
         
-        .typing-dot:nth-child(2) { animation-delay: 0.2s; }
-        .typing-dot:nth-child(3) { animation-delay: 0.4s; }
+        .typing-dot:nth-child(2) {{ animation-delay: 0.2s; }}
+        .typing-dot:nth-child(3) {{ animation-delay: 0.4s; }}
         
-        @keyframes typing {
-            0%, 60%, 100% { transform: translateY(0); }
-            30% { transform: translateY(-10px); }
-        }
+        @keyframes typing {{
+            0%, 60%, 100% {{ transform: translateY(0); }}
+            30% {{ transform: translateY(-10px); }}
+        }}
         
         /* INPUT AREA */
-        .input-area {
+        .input-area {{
             padding: 20px 30px;
             background: white;
             border-top: 1px solid #e2e8f0;
-        }
+        }}
         
-        .input-container {
+        .input-container {{
             display: flex;
             gap: 15px;
             align-items: flex-end;
-        }
+        }}
         
-        .message-input {
+        .message-input {{
             flex: 1;
             padding: 15px 20px;
             border: 2px solid #e2e8f0;
@@ -969,14 +985,14 @@ async def chat_interface():
             resize: none;
             max-height: 120px;
             transition: border-color 0.2s;
-        }
+        }}
         
-        .message-input:focus {
+        .message-input:focus {{
             outline: none;
             border-color: #4f46e5;
-        }
+        }}
         
-        .send-button {
+        .send-button {{
             background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
             color: white;
             border: none;
@@ -989,25 +1005,25 @@ async def chat_interface():
             cursor: pointer;
             transition: transform 0.2s;
             font-size: 1.2rem;
-        }
+        }}
         
-        .send-button:hover:not(:disabled) {
+        .send-button:hover:not(:disabled) {{
             transform: translateY(-2px);
-        }
+        }}
         
-        .send-button:disabled {
+        .send-button:disabled {{
             opacity: 0.5;
             cursor: not-allowed;
-        }
+        }}
         
-        .input-actions {
+        .input-actions {{
             display: flex;
             gap: 10px;
             margin-top: 10px;
             padding-left: 10px;
-        }
+        }}
         
-        .input-action {
+        .input-action {{
             background: none;
             border: none;
             color: #64748b;
@@ -1016,15 +1032,15 @@ async def chat_interface():
             border-radius: 15px;
             font-size: 0.9rem;
             transition: all 0.2s;
-        }
+        }}
         
-        .input-action:hover {
+        .input-action:hover {{
             background: #f1f5f9;
             color: #4f46e5;
-        }
+        }}
         
         /* MODAL */
-        .modal-overlay {
+        .modal-overlay {{
             position: fixed;
             top: 0;
             left: 0;
@@ -1038,14 +1054,14 @@ async def chat_interface():
             opacity: 0;
             pointer-events: none;
             transition: opacity 0.3s;
-        }
+        }}
         
-        .modal-overlay.active {
+        .modal-overlay.active {{
             opacity: 1;
             pointer-events: all;
-        }
+        }}
         
-        .modal {
+        .modal {{
             background: white;
             border-radius: 20px;
             padding: 30px;
@@ -1055,44 +1071,44 @@ async def chat_interface():
             overflow-y: auto;
             transform: translateY(20px);
             transition: transform 0.3s;
-        }
+        }}
         
-        .modal-overlay.active .modal {
+        .modal-overlay.active .modal {{
             transform: translateY(0);
-        }
+        }}
         
-        .modal-header {
+        .modal-header {{
             display: flex;
             justify-content: space-between;
             align-items: center;
             margin-bottom: 20px;
-        }
+        }}
         
-        .modal-title {
+        .modal-title {{
             font-size: 1.5rem;
             font-weight: 600;
-        }
+        }}
         
-        .modal-close {
+        .modal-close {{
             background: none;
             border: none;
             font-size: 1.5rem;
             cursor: pointer;
             color: #64748b;
-        }
+        }}
         
-        .form-group {
+        .form-group {{
             margin-bottom: 20px;
-        }
+        }}
         
-        .form-label {
+        .form-label {{
             display: block;
             margin-bottom: 8px;
             font-weight: 600;
             color: #374151;
-        }
+        }}
         
-        .form-input {
+        .form-input {{
             width: 100%;
             padding: 12px 15px;
             border: 2px solid #e2e8f0;
@@ -1100,32 +1116,32 @@ async def chat_interface():
             font-size: 1rem;
             font-family: inherit;
             transition: border-color 0.2s;
-        }
+        }}
         
-        .form-input:focus {
+        .form-input:focus {{
             outline: none;
             border-color: #4f46e5;
-        }
+        }}
         
-        .form-textarea {
+        .form-textarea {{
             min-height: 100px;
             resize: vertical;
-        }
+        }}
         
-        .form-select {
+        .form-select {{
             appearance: none;
             background: white url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='%2364748b' viewBox='0 0 16 16'%3E%3Cpath d='M7.247 11.14 2.451 5.658C1.885 5.013 2.345 4 3.204 4h9.592a1 1 0 0 1 .753 1.659l-4.796 5.48a1 1 0 0 1-1.506 0z'/%3E%3C/svg%3E") no-repeat right 15px center;
             padding-right: 45px;
-        }
+        }}
         
-        .modal-footer {
+        .modal-footer {{
             display: flex;
             justify-content: flex-end;
             gap: 10px;
             margin-top: 30px;
-        }
+        }}
         
-        .btn {
+        .btn {{
             padding: 12px 24px;
             border-radius: 10px;
             font-size: 1rem;
@@ -1133,45 +1149,45 @@ async def chat_interface():
             cursor: pointer;
             transition: all 0.2s;
             border: none;
-        }
+        }}
         
-        .btn-primary {
+        .btn-primary {{
             background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
             color: white;
-        }
+        }}
         
-        .btn-primary:hover {
+        .btn-primary:hover {{
             transform: translateY(-2px);
             box-shadow: 0 10px 25px rgba(79, 70, 229, 0.4);
-        }
+        }}
         
-        .btn-secondary {
+        .btn-secondary {{
             background: #f1f5f9;
             color: #64748b;
-        }
+        }}
         
-        .btn-secondary:hover {
+        .btn-secondary:hover {{
             background: #e2e8f0;
-        }
+        }}
         
         /* RESPONSIVE */
-        @media (max-width: 1024px) {
-            .app-container {
+        @media (max-width: 1024px) {{
+            .app-container {{
                 border-radius: 0;
                 height: 100vh;
-            }
+            }}
             
-            .sidebar {
+            .sidebar {{
                 width: 250px;
-            }
-        }
+            }}
+        }}
         
-        @media (max-width: 768px) {
-            .sidebar {
+        @media (max-width: 768px) {{
+            .sidebar {{
                 display: none;
-            }
+            }}
             
-            .sidebar.mobile-visible {
+            .sidebar.mobile-visible {{
                 display: flex;
                 position: fixed;
                 top: 0;
@@ -1179,24 +1195,24 @@ async def chat_interface():
                 bottom: 0;
                 z-index: 100;
                 width: 100%;
-            }
+            }}
             
-            .mobile-menu-btn {
+            .mobile-menu-btn {{
                 display: block;
-            }
-        }
+            }}
+        }}
         
-        .mobile-menu-btn {
+        .mobile-menu-btn {{
             display: none;
             background: none;
             border: none;
             color: #64748b;
             font-size: 1.5rem;
             cursor: pointer;
-        }
+        }}
         
         /* WELCOME SCREEN */
-        .welcome-screen {
+        .welcome-screen {{
             flex: 1;
             display: flex;
             flex-direction: column;
@@ -1204,29 +1220,29 @@ async def chat_interface():
             justify-content: center;
             padding: 40px;
             text-align: center;
-        }
+        }}
         
-        .welcome-icon {
+        .welcome-icon {{
             font-size: 4rem;
             margin-bottom: 20px;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             background-clip: text;
-        }
+        }}
         
-        .welcome-title {
+        .welcome-title {{
             font-size: 2rem;
             margin-bottom: 10px;
             color: #1e293b;
-        }
+        }}
         
-        .welcome-text {
+        .welcome-text {{
             color: #64748b;
             max-width: 500px;
             margin-bottom: 30px;
             line-height: 1.6;
-        }
+        }}
     </style>
 </head>
 <body>
@@ -1405,8 +1421,8 @@ async def chat_interface():
     <!-- SCRIPT -->
     <script>
         // Configuration
-        const API_KEY = """ + json.dumps(CREATOR_API_KEY) + """;
-        const OVERRIDE_TOKEN = """ + json.dumps(OVERRIDE_TOKEN) + """;
+        const API_KEY = "{CREATOR_API_KEY}";
+        const OVERRIDE_TOKEN = "{OVERRIDE_TOKEN}";
         
         // State
         let currentBotId = null;
@@ -1439,18 +1455,18 @@ async def chat_interface():
         // Event Listeners
         function setupEventListeners() {
             temperatureInput.addEventListener('input', (e) => {
-                temperatureValue.textContent = `Creative (${e.target.value})`;
+                temperatureValue.textContent = `Creative (${{e.target.value}})`;
             });
         }
         
         // Bot Management
         async function loadBots() {
             try {
-                const response = await fetch('/api/bots', {
-                    headers: {
+                const response = await fetch('/api/bots', {{
+                    headers: {{
                         'X-API-Key': API_KEY
-                    }
-                });
+                    }}
+                }});
                 
                 const data = await response.json();
                 
@@ -1466,29 +1482,29 @@ async def chat_interface():
         function renderBotList(bots) {
             botList.innerHTML = '';
             
-            bots.forEach(bot => {
+            bots.forEach(bot => {{
                 const botElement = document.createElement('div');
                 botElement.className = 'bot-card';
                 botElement.innerHTML = `
                     <div class="bot-header">
-                        <div class="bot-avatar">${bot.avatar}</div>
+                        <div class="bot-avatar">${{bot.avatar}}</div>
                         <div class="bot-info">
-                            <h3>${bot.name}</h3>
+                            <h3>${{bot.name}}</h3>
                             <div class="bot-status">
-                                <span class="status-dot ${bot.status === 'online' ? '' : 'offline'}"></span>
-                                <span>${bot.status}</span>
+                                <span class="status-dot ${{bot.status === 'online' ? '' : 'offline'}}"></span>
+                                <span>${{bot.status}}</span>
                             </div>
                         </div>
                     </div>
-                    <p style="color: #a0a0c0; font-size: 0.9rem; margin-bottom: 10px;">${bot.description}</p>
+                    <p style="color: #a0a0c0; font-size: 0.9rem; margin-bottom: 10px;">${{bot.description}}</p>
                     <div class="bot-skills">
-                        ${bot.skills.map(skill => `<span class="skill-tag">${skill}</span>`).join('')}
+                        ${{bot.skills.map(skill => `<span class="skill-tag">${{skill}}</span>`).join('')}}
                     </div>
                 `;
                 
                 botElement.addEventListener('click', () => selectBot(bot));
                 botList.appendChild(botElement);
-            });
+            }});
         }
         
         function selectBot(bot) {
@@ -1496,17 +1512,17 @@ async def chat_interface():
             currentBot = bot;
             
             // Update UI
-            document.querySelectorAll('.bot-card').forEach(card => {
+            document.querySelectorAll('.bot-card').forEach(card => {{
                 card.classList.remove('active');
-            });
+            }});
             event.currentTarget.classList.add('active');
             
             // Update chat header
             chatHeader.innerHTML = `
-                <div class="chat-header-avatar">${bot.avatar}</div>
+                <div class="chat-header-avatar">${{bot.avatar}}</div>
                 <div class="chat-header-text">
-                    <h2>${bot.name}</h2>
-                    <p>${bot.description}</p>
+                    <h2>${{bot.name}}</h2>
+                    <p>${{bot.description}}</p>
                 </div>
             `;
             
@@ -1526,31 +1542,32 @@ async def chat_interface():
         
         // WebSocket
         function connectWebSocket() {
-            if (websocket) {
+            if (websocket) {{
                 websocket.close();
-            }
+            }}
             
-            const wsUrl = `ws://${window.location.host}/ws/chat/${userId}/${currentBotId}`;
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${{protocol}}//${{window.location.host}}/ws/chat/${{userId}}/${{currentBotId}}`;
             websocket = new WebSocket(wsUrl);
             
-            websocket.onopen = () => {
+            websocket.onopen = () => {{
                 console.log('WebSocket connected');
-            };
+            }};
             
-            websocket.onmessage = (event) => {
+            websocket.onmessage = (event) => {{
                 const data = JSON.parse(event.data);
                 handleWebSocketMessage(data);
-            };
+            }};
             
-            websocket.onclose = () => {
+            websocket.onclose = () => {{
                 console.log('WebSocket disconnected');
-            };
+            }};
             
-            websocket.onerror = (error) => {
+            websocket.onerror = (error) => {{
                 console.error('WebSocket error:', error);
                 showError('Connection error. Trying to reconnect...');
                 setTimeout(connectWebSocket, 3000);
-            };
+            }};
         }
         
         function handleWebSocketMessage(data) {
@@ -1573,7 +1590,7 @@ async def chat_interface():
             messageElement.className = 'message system';
             messageElement.innerHTML = `
                 <div class="message-content" style="text-align: center; color: #666;">
-                    ${content}
+                    ${{content}}
                 </div>
             `;
             messagesContainer.appendChild(messageElement);
@@ -1587,9 +1604,9 @@ async def chat_interface():
                 <div class="message-header">
                     <div class="message-avatar">👤</div>
                     <div class="message-sender">You</div>
-                    <div class="message-time">${formatTime(new Date())}</div>
+                    <div class="message-time">${{formatTime(new Date())}}</div>
                 </div>
-                <div class="message-content">${escapeHtml(content)}</div>
+                <div class="message-content">${{escapeHtml(content)}}</div>
             `;
             messagesContainer.appendChild(messageElement);
             scrollToBottom();
@@ -1602,11 +1619,11 @@ async def chat_interface():
             messageElement.className = 'message bot';
             messageElement.innerHTML = `
                 <div class="message-header">
-                    <div class="message-avatar">${avatar}</div>
-                    <div class="message-sender">${botName}</div>
-                    <div class="message-time">${formatTime(new Date())}</div>
+                    <div class="message-avatar">${{avatar}}</div>
+                    <div class="message-sender">${{botName}}</div>
+                    <div class="message-time">${{formatTime(new Date())}}</div>
                 </div>
-                <div class="message-content">${formatBotMessage(content)}</div>
+                <div class="message-content">${{formatBotMessage(content)}}</div>
             `;
             messagesContainer.appendChild(messageElement);
             scrollToBottom();
@@ -1619,7 +1636,7 @@ async def chat_interface():
             typingElement.className = 'typing-indicator';
             typingElement.id = 'typingIndicator';
             typingElement.innerHTML = `
-                <div class="message-avatar">${currentBot?.avatar || '🤖'}</div>
+                <div class="message-avatar">${{currentBot?.avatar || '🤖'}}</div>
                 <div class="typing-dots">
                     <div class="typing-dot"></div>
                     <div class="typing-dot"></div>
@@ -1647,10 +1664,10 @@ async def chat_interface():
             addUserMessage(content);
             
             // Send via WebSocket
-            websocket.send(JSON.stringify({
+            websocket.send(JSON.stringify({{
                 type: 'message',
                 content: content
-            }));
+            }}));
             
             // Clear input
             messageInput.value = '';
@@ -1658,31 +1675,31 @@ async def chat_interface():
             
             // Disable send button temporarily
             sendButton.disabled = true;
-            setTimeout(() => {
+            setTimeout(() => {{
                 sendButton.disabled = false;
-            }, 1000);
+            }}, 1000);
         }
         
         async function loadChatHistory() {
             try {
-                const response = await fetch(`/api/chat/history/${currentBotId}`, {
-                    headers: {
+                const response = await fetch(`/api/chat/history/${{currentBotId}}`, {{
+                    headers: {{
                         'X-API-Key': API_KEY
-                    }
-                });
+                    }}
+                }});
                 
                 const data = await response.json();
                 
                 if (data.success && data.history.length > 0) {
                     clearMessages();
                     
-                    data.history.forEach(msg => {
+                    data.history.forEach(msg => {{
                         if (msg.role === 'user') {
                             addUserMessage(msg.content);
-                        } else if (msg.role === 'assistant') {
+                        }} else if (msg.role === 'assistant') {{
                             addBotMessage(msg.content, currentBot.name, currentBot.avatar);
-                        }
-                    });
+                        }}
+                    }});
                 }
             } catch (error) {
                 console.error('Error loading chat history:', error);
@@ -1694,12 +1711,12 @@ async def chat_interface():
             
             if (confirm('Clear chat history with this bot?')) {
                 try {
-                    await fetch(`/api/chat/history/${currentBotId}`, {
+                    await fetch(`/api/chat/history/${{currentBotId}}`, {{
                         method: 'DELETE',
-                        headers: {
+                        headers: {{
                             'X-API-Key': API_KEY
-                        }
-                    });
+                        }}
+                    }});
                     
                     clearMessages();
                     addSystemMessage('Chat history cleared');
@@ -1733,7 +1750,7 @@ async def chat_interface():
         }
         
         function formatTime(date) {
-            return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            return date.toLocaleTimeString([], {{ hour: '2-digit', minute: '2-digit' }});
         }
         
         function formatBotMessage(content) {
@@ -1741,19 +1758,19 @@ async def chat_interface():
             let formatted = escapeHtml(content);
             
             // Code blocks
-            formatted = formatted.replace(/```(\w+)?\n([\s\S]*?)\n```/g, '<pre><code>$2</code></pre>');
+            formatted = formatted.replace(/```(\\w+)?\\n([\\s\\S]*?)\\n```/g, '<pre><code>$2</code></pre>');
             
             // Inline code
             formatted = formatted.replace(/`([^`]+)`/g, '<code>$1</code>');
             
             // Bold
-            formatted = formatted.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+            formatted = formatted.replace(/\\*\\*([^*]+)\\*\\*/g, '<strong>$1</strong>');
             
             // Links
-            formatted = formatted.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank">$1</a>');
+            formatted = formatted.replace(/\\[([^\\]]+)\\]\\(([^)]+)\\)/g, '<a href="$2" target="_blank">$1</a>');
             
             // Line breaks
-            formatted = formatted.replace(/\n/g, '<br>');
+            formatted = formatted.replace(/\\n/g, '<br>');
             
             return formatted;
         }
@@ -1776,7 +1793,7 @@ async def chat_interface():
         async function createNewBot(event) {
             event.preventDefault();
             
-            const botData = {
+            const botData = {{
                 name: document.getElementById('botNameInput').value,
                 description: document.getElementById('botDescriptionInput').value,
                 skills: document.getElementById('botSkillsInput').value.split(',').map(s => s.trim()),
@@ -1784,17 +1801,17 @@ async def chat_interface():
                 temperature: parseFloat(temperatureInput.value),
                 avatar: document.querySelector('input[name="avatar"]:checked').value,
                 is_public: true
-            };
+            }};
             
             try {
-                const response = await fetch('/api/bots', {
+                const response = await fetch('/api/bots', {{
                     method: 'POST',
-                    headers: {
+                    headers: {{
                         'Content-Type': 'application/json',
                         'X-API-Key': API_KEY
-                    },
+                    }},
                     body: JSON.stringify(botData)
-                });
+                }});
                 
                 const data = await response.json();
                 
@@ -1807,9 +1824,9 @@ async def chat_interface():
                     event.target.reset();
                     temperatureValue.textContent = 'Creative (0.7)';
                     temperatureInput.value = 0.7;
-                } else {
+                }} else {{
                     showError(data.detail || 'Failed to create bot');
-                }
+                }}
             } catch (error) {
                 console.error('Error creating bot:', error);
                 showError('Failed to create bot');
@@ -1822,22 +1839,22 @@ async def chat_interface():
         }
         
         function exportChat() {
-            if (!currentBot) {
+            if (!currentBot) {{
                 showError('Select a bot first');
                 return;
-            }
+            }}
             
-            const messages = Array.from(messagesContainer.querySelectorAll('.message')).map(msg => {
+            const messages = Array.from(messagesContainer.querySelectorAll('.message')).map(msg => {{
                 const sender = msg.classList.contains('user') ? 'You' : currentBot.name;
                 const content = msg.querySelector('.message-content').textContent;
-                return `${sender}: ${content}`;
-            }).join('\n\n');
+                return `${{sender}}: ${{content}}`;
+            }}).join('\\n\\n');
             
-            const blob = new Blob([messages], { type: 'text/plain' });
+            const blob = new Blob([messages], {{ type: 'text/plain' }});
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = `chat-with-${currentBot.name}-${new Date().toISOString().split('T')[0]}.txt`;
+            a.download = `chat-with-${{currentBot.name}}-${{new Date().toISOString().split('T')[0]}}.txt`;
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
@@ -1849,7 +1866,6 @@ async def chat_interface():
         }
         
         function loadSampleBots() {
-            // This would load sample bots if we had any
             showSuccess('Loading sample bots...');
             loadBots();
         }
@@ -1859,7 +1875,7 @@ async def chat_interface():
             const text = messageInput.value;
             const before = text.substring(0, cursorPos);
             const after = text.substring(cursorPos);
-            messageInput.value = before + '```python\n# Your code here\n```' + after;
+            messageInput.value = before + '```python\\n# Your code here\\n```' + after;
             autoResizeTextarea();
             messageInput.focus();
         }
@@ -1868,12 +1884,12 @@ async def chat_interface():
             const input = document.createElement('input');
             input.type = 'file';
             input.accept = '.txt,.pdf,.jpg,.png,.csv';
-            input.onchange = (e) => {
+            input.onchange = (e) => {{
                 const file = e.target.files[0];
-                if (file) {
-                    showSuccess(`File selected: ${file.name}`);
-                }
-            };
+                if (file) {{
+                    showSuccess(`File selected: ${{file.name}}`);
+                }}
+            }};
             input.click();
         }
         
@@ -1883,24 +1899,24 @@ async def chat_interface():
                 recognition.continuous = false;
                 recognition.interimResults = false;
                 
-                recognition.onstart = () => {
+                recognition.onstart = () => {{
                     showSuccess('Listening...');
-                };
+                }};
                 
-                recognition.onresult = (event) => {
+                recognition.onresult = (event) => {{
                     const transcript = event.results[0][0].transcript;
                     messageInput.value += transcript;
                     autoResizeTextarea();
-                };
+                }};
                 
-                recognition.onerror = (event) => {
+                recognition.onerror = (event) => {{
                     showError('Speech recognition error');
-                };
+                }};
                 
                 recognition.start();
-            } else {
+            }} else {{
                 showError('Speech recognition not supported');
-            }
+            }}
         }
         
         // Notification Functions
@@ -1924,47 +1940,47 @@ async def chat_interface():
                 font-weight: 600;
                 z-index: 1000;
                 animation: slideIn 0.3s ease;
-                ${type === 'success' ? 'background: #10b981;' : 'background: #ef4444;'}
+                ${{type === 'success' ? 'background: #10b981;' : 'background: #ef4444;'}}
             `;
             notification.textContent = message;
             document.body.appendChild(notification);
             
-            setTimeout(() => {
+            setTimeout(() => {{
                 notification.style.animation = 'slideOut 0.3s ease';
                 setTimeout(() => notification.remove(), 300);
-            }, 3000);
+            }}, 3000);
         }
         
         // Add CSS animations
         const style = document.createElement('style');
         style.textContent = `
-            @keyframes slideIn {
-                from { transform: translateX(100%); opacity: 0; }
-                to { transform: translateX(0); opacity: 1; }
-            }
-            @keyframes slideOut {
-                from { transform: translateX(0); opacity: 1; }
-                to { transform: translateX(100%); opacity: 0; }
-            }
-            .dark-mode {
+            @keyframes slideIn {{
+                from {{ transform: translateX(100%); opacity: 0; }}
+                to {{ transform: translateX(0); opacity: 1; }}
+            }}
+            @keyframes slideOut {{
+                from {{ transform: translateX(0); opacity: 1; }}
+                to {{ transform: translateX(100%); opacity: 0; }}
+            }}
+            .dark-mode {{
                 background: #1a1a2e;
-            }
-            .dark-mode .app-container {
+            }}
+            .dark-mode .app-container {{
                 background: #2d2d4d;
                 color: white;
-            }
-            .dark-mode .chat-area {
+            }}
+            .dark-mode .chat-area {{
                 background: #2d2d4d;
-            }
-            .dark-mode .message.bot {
+            }}
+            .dark-mode .message.bot {{
                 background: #3d3d5d;
                 color: white;
-            }
-            .dark-mode .message-input {
+            }}
+            .dark-mode .message-input {{
                 background: #3d3d5d;
                 color: white;
                 border-color: #4f46e5;
-            }
+            }}
         `;
         document.head.appendChild(style);
     </script>
